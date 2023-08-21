@@ -391,7 +391,7 @@ Resources:
             Value: !Ref app
           - Key: "awsEnv"
             Value: !Ref awsEnv
-  bastionHostCpuUtilizationCWAlarm:
+  ALBCpuUtilizationCWAlarm:
       Type: AWS::CloudFormation::Stack
       Properties:
         TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-alarm-app.yml'
@@ -410,6 +410,32 @@ Resources:
           ComparisonOperator: 'GreaterThanThreshold'
           DimensionName: 'LoadBalancer'
           DimensionValue: !GetAtt codeDeployAutoScalingLBSpringBootApp.Outputs.LoadBalancerName
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  bastionHostCpuUtilizationCWAlarm:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-alarm-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          AlarmName: 'EC2 CPU Utilization Alarm'
+          AlarmDescription: 'Alarm if EC2 CPU utilization exceeds 80 percent'
+          Namespace: 'AWS/EC2'
+          MetricName: 'CPUUtilization'
+          Statistic: 'Average'
+          Period: '300'
+          EvaluationPeriods: '1'
+          Threshold: '80'
+          ComparisonOperator: 'GreaterThanThreshold'
+          DimensionName: 'InstanceId'
+          DimensionValue: !GetAtt bastionHost.Outputs.ec2Instance
         Tags:
           - Key: "project"
             Value: !Ref project
