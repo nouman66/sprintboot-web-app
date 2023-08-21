@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "cfn cloud watch alarms"
+Parameters:
+  project:
+    Type: String
+    Description: Name of the project
+  app:
+    Type: String
+    Default: app
+    Description: Name of the app
+  env:
+    Type: String
+    Default: prod
+    AllowedValues: [poc, dev, qa, uat, uat-dr, prod, prod-dr,stag01,stag,test,stage,dr]
+  AlarmName:
+    Type: String
+  AlarmDescription:
+    Type: String
+  Namespace:
+    Type: String
+  MetricName:
+    Type: String
+  Statistic:
+    Type: String
+  Period:
+    Type: String
+  EvaluationPeriods:
+    Type: String
+  Threshold:
+    Type: String
+  ComparisonOperator:
+    Type: String
+  DimensionName:
+    Type: String
+    Description: Statistic for the metric associated with the alarm
+  DimensionValue: 
+    Type: String
+  AlarmSNSTopic:
+    Type: String
+
+Resources:
+
+  Alarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: !Ref AlarmName
+      AlarmDescription: !Ref AlarmDescription
+      Namespace: !Ref Namespace
+      MetricName: !Ref MetricName
+      Statistic: !Ref Statistic
+      Period: !Ref Period
+      EvaluationPeriods: !Ref EvaluationPeriods
+      Threshold: !Ref Threshold
+      ComparisonOperator: !Ref ComparisonOperator
+      Dimensions:
+        - Name: !Ref DimensionName
+          Value: !Ref DimensionValue
+      AlarmActions:
+        - Ref: AlarmSNSTopic
+
+ 
+Outputs:
+  Alarm:      
+    Value: !Ref Alarm
+    Export: 
+      Name: !Sub "${project}-${env}-${AlarmName}"
+  

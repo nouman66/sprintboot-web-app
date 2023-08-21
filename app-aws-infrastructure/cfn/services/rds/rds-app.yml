@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "cfn rds base template"
+Parameters:
+  project:
+    Type: String
+    Description: Name of the project
+  app:
+    Type: String
+    Description: Name of the application
+  awsEnv:
+    Type: String
+    AllowedValues: [poc, dev, dev01, int, int01, uat, uat01, prd, prd01,stage,stag01,test,prod,dr]
+  dbInstanceIdentifier:
+    Type: String
+    Description: Enter DB instance identifies for uniquely Identify DB instance
+  rdsAllocatedStorage:
+    Type: Number
+    Default: '20'    
+    MinValue: '20'
+    MaxValue: '6000'
+    Description: The size of the database (Gb).
+    ConstraintDescription: Must be between 20-6000.
+  rdsAllowMajorVersionUpgrade:
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+    Description: Indicates major engine upgrades.
+  rdsAutoMinorVersionUpgrade:
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+    Description: Indicates minor engine upgrades.
+  rdsBackupRetentionPeriod:
+    Type: Number
+    Default: '1'
+    MinValue: '0'
+    MaxValue: '8'
+    Description: The number of days for which automated backups are retained.
+    ConstraintDescription: Minimum is 0 and Maximun is 8.
+  rdsCopyTagsToSnapshot:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: A value that indicates whether to copy tags from the DB instance to snapshots of the DB instance.
+  rdsDBInstanceClass:
+    Type: String
+    Default: db.m6i.large
+    Description: The compute and memory capacity of the DB instance.
+  rdsDBSubnetGroupName:
+    Type: String
+    Description: Specify DBSubnetGroupName
+  rdsSubnets: 
+    Type: String
+    Description: Private subnets
+  rdsDeleteAutomatedBackups:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: A value that indicates whether to remove automated backups immediately after the DB instance is deleted
+  rdsDBName:
+    Type: String
+    Description: The name of the DB instance. Assign an empty string for this if the engine is mssql.
+  rdsDeletionProtection:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: A value that indicates whether to remove automated backups immediately after the DB instance is deleted.
+  rdsEnablePerformanceInsights:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: A value that indicates whether to enable Performance Insights for the DB instance.
+  rdsEngine: 
+    Type: String
+    Description: RDS Engine type.
+  rdsEngineVersion:
+    Type: String
+    Description: RDS Engine Version.
+  rdsEnableIAMDatabaseAuthentication:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: A value that indicates whether to enable mapping of AWS Identity and Access Management (IAM) accounts to database accounts.
+  rdsPort:
+    Type: Number
+    Default: 5432
+    Description: The port number on which the database accepts connections.
+  rdsIops:
+    Type: Number
+    Default: '1000'
+    MinValue: '1000'
+    Description: The number of I/O operations per second (IOPS) that the database provisions
+    ConstraintDescription: Minimum value is 1000.
+  rdsStorageType:
+    Type: String
+    Default: 'gp2'
+    AllowedValues: ['gp2', 'io1']
+    Description: Specifies the storage type to be associated with the DB instance.
+  rdsStorageEncrypted:
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+    Description: Specifies the storage type to be associated with the DB instance.
+  rdsPubliclyAccessible:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: Indicates whether the DB instance is an internet-facing instance.
+  rdsPreferredBackupWindow:
+    Type:           String
+    Default:        02:00-03:00
+    Description:    RDS DB preferred backup window
+  rdsPreferredMaintenanceWindow:
+    Type:           String
+    Default:        mon:03:00-mon:04:00
+    Description:    RDS DB instance preferred maintenance window
+  rdsKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: The Amazon Resource Name (ARN) of the AWS Key Management Service master key that is used to encrypt the database instances.
+  rdsDBSnapshotIdentifier:
+    Type: String
+    Default: ''
+    Description: The name or Amazon Resource Name (ARN) of the DB snapshot that's used to restore the DB instance.
+  rdsMasterUser:
+    Type: String
+    Description: The database admin account username.
+    Default: ''
+  rdsMasterUserPassword:
+    Type: String
+    NoEcho: true
+    Description: Master RDS password. Minimum Length is 8
+    Default: ''
+  rdsMultiAZ:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: Specifies whether the database instance is a multiple Availability Zone deployment.
+  rdsVPCSecurityGroup:
+    Type: String
+    Description: Specify SecurityGroup.
+  rdsReadReplica:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: Create ReadReplica. This should be false for sql server.
+  rdsParameterGroup:
+    Type: String
+    Description: RDS Parameter Group.
+  rdsMaxAllocatedStorage:
+    Type: String
+    Default: ''
+    Description: Amazon RDS can automatically scale the storage of the DB instance. This should be in gibibytes (GiB).
+  rdsMonitoringInterval:
+    Type: Number
+    Default: 0
+    Description: Define the interval(In seconds), between points when Enhanced Monitoring metrics are collected for the DB instance. 
+  rdsMonitoringRoleArn:
+    Type: String
+    Default: ''
+    Description: The ARN for the IAM role that permits RDS to send enhanced monitoring metrics to Amazon CloudWatch Logs.  
+Conditions:
+  rdsStorageTypeCheck: !Equals [ !Ref rdsStorageType, 'io1' ]
+  hasDBSnapshotIdentifier: !Not [!Equals [!Ref rdsDBSnapshotIdentifier, '']]
+  hasDBMaxAllocatedStorage: !Not [!Equals  [!Ref rdsMaxAllocatedStorage, '']]
+  hasMonitoringInterval: !Not [!Equals [!Ref rdsMonitoringInterval, 0]]
+  hasMonitoringRoleArn: !Not [!Equals  [!Ref rdsMonitoringRoleArn, '']]
+  isEnabledEnhancedMonitoring: !And 
+    - !Condition hasMonitoringInterval
+    - !Condition hasMonitoringRoleArn
+  createReadReplica: !Equals [ !Ref rdsReadReplica, true ]
+Resources:
+  rdsSubnetGroupName:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+     DBSubnetGroupDescription: !Ref rdsDBSubnetGroupName
+     DBSubnetGroupName: !Ref rdsDBSubnetGroupName
+     SubnetIds: !Split [",", !Ref rdsSubnets]
+     Tags: 
+        - Key: awsEnv
+          Value: !Ref awsEnv
+        - Key: Name
+          Value: !Sub '${project}-${app}-${awsEnv}-rds-subnetGroup-${AWS::Region}'
+        - Key: project
+          Value: !Ref project
+  rdsDB:
+    Type: "AWS::RDS::DBInstance"
+    DeletionPolicy: Snapshot
+    Properties: 
+      AllocatedStorage: !Ref rdsAllocatedStorage
+      AllowMajorVersionUpgrade: !Ref rdsAllowMajorVersionUpgrade
+      AutoMinorVersionUpgrade: !Ref rdsAutoMinorVersionUpgrade
+      BackupRetentionPeriod: !Ref rdsBackupRetentionPeriod
+      CopyTagsToSnapshot: !Ref rdsCopyTagsToSnapshot
+      DBInstanceIdentifier: !Ref dbInstanceIdentifier 
+      DBInstanceClass: !Ref rdsDBInstanceClass
+      DBName: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsDBName] 
+      DBParameterGroupName: !Ref rdsParameterGroup
+      DBSubnetGroupName: !Ref rdsSubnetGroupName
+      DeleteAutomatedBackups: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsDeleteAutomatedBackups]  
+      DeletionProtection: !Ref rdsDeletionProtection
+      EnableIAMDatabaseAuthentication: !Ref rdsEnableIAMDatabaseAuthentication
+      EnablePerformanceInsights: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsEnablePerformanceInsights] 
+      Engine: !Ref rdsEngine
+      EngineVersion: !Ref rdsEngineVersion
+      KmsKeyId: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsKmsKeyArn]
+      MonitoringInterval: !If [isEnabledEnhancedMonitoring,!Ref rdsMonitoringInterval, !Ref 'AWS::NoValue' ]
+      MonitoringRoleArn: !If [isEnabledEnhancedMonitoring,!Ref rdsMonitoringRoleArn, !Ref 'AWS::NoValue' ]
+      MaxAllocatedStorage: !If [hasDBMaxAllocatedStorage, !Ref rdsMaxAllocatedStorage, !Ref 'AWS::NoValue']
+      MasterUserPassword: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsMasterUserPassword]
+      MasterUsername: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsMasterUser]
+      DBSnapshotIdentifier: !If [hasDBSnapshotIdentifier, !Ref rdsDBSnapshotIdentifier, !Ref 'AWS::NoValue']
+      MultiAZ: !Ref rdsMultiAZ
+      Port: !Ref rdsPort
+      PreferredBackupWindow: !Ref rdsPreferredBackupWindow
+      PreferredMaintenanceWindow: !Ref rdsPreferredMaintenanceWindow
+      PubliclyAccessible: !Ref rdsPubliclyAccessible
+      StorageEncrypted: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsStorageEncrypted]
+      StorageType: !Ref rdsStorageType 
+      Iops: !If [ rdsStorageTypeCheck, !Ref rdsIops, !Ref "AWS::NoValue"]
+      VPCSecurityGroups:
+        - !Ref rdsVPCSecurityGroup
+      Tags: 
+        - Key: awsEnv
+          Value: !Ref awsEnv
+        - Key: Name
+          Value: !Sub '${project}-${app}-${awsEnv}-${dbInstanceIdentifier}-${AWS::Region}'
+        - Key: project
+          Value: !Ref project
+  rdsReplica:
+    Type: 'AWS::RDS::DBInstance'
+    Condition: createReadReplica
+    Properties:
+      SourceDBInstanceIdentifier: !Ref rdsDB
+      DBInstanceIdentifier: !Sub "${project}-${app}-${awsEnv}-readreplica-${AWS::Region}" 
+      DBInstanceClass: !Ref rdsDBInstanceClass
+      Tags:
+        - Key: awsEnv
+          Value: !Ref awsEnv
+        - Key: Name
+          Value: !Sub '${project}-${app}-${awsEnv}-rdsReadReplica-${AWS::Region}'
+        - Key: app
+          Value: !Ref app
+Outputs:
+  rdsDBInstance:
+    Description: RDS DB instance name
+    Value: !Ref rdsDB
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rdsDBIdentifier-${AWS::Region}"
+  rdsDBEndpointAddress:
+    Description: RDS Endpoint
+    Value: !GetAtt rdsDB.Endpoint.Address
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rdsEndpointURL-${AWS::Region}"
+  rdsDBEndpointPort:
+    Description: RDS Endpoint Port
+    Value: !GetAtt rdsDB.Endpoint.Port
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rdsEndpointPort-${AWS::Region}"
+  rdsReadReplicaDBEndpointAddress:
+    Description: RDS ReadReplica Endpoint
+    Value: !GetAtt rdsReplica.Endpoint.Address
+    Condition: createReadReplica
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rdsReadReplicaEndpointURL-${AWS::Region}"
+  rdsReadReplicaDBEndpointPort:
+    Description: RDS ReadReplica Endpoint Port
+    Value: !GetAtt rdsReplica.Endpoint.Port
+    Condition: createReadReplica
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rdsReadReplicaEndpointPort-${AWS::Region}"

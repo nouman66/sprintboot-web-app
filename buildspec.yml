@@ -1,0 +1,21 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto11
+  build:
+    commands:
+      - cd $APP_FOLDER
+      - mvn clean install
+      - mvn clean package
+
+  post_build:
+    commands:
+      - echo Build completed
+artifacts:
+  files:
+    - $APP_FOLDER/target/*.war
+    - aws/scripts/*.sh
+    - appspec.yml
+  discard-paths: yes

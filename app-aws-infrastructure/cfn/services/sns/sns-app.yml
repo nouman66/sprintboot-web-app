@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "cfn for sns topic"
+
+Parameters:
+  project:
+    Type: String
+    MinLength: '3'
+    MaxLength: '10'
+    Description: Enter the Project Name.
+  app:
+    Type: String
+    MinLength: '3'
+    MaxLength: '15'
+    Description: Enter the Application.
+  env:
+    Type: String
+    AllowedValues: [dev, dev01, int, int01, uat, uat01, prd, prd01,stage,prod,poc,dr]
+    Description: Enter the Environment.
+  snsTopicName: 
+    Type: String
+    Description: SNS topic name
+Resources: 
+  snsTopic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      DisplayName: 'CloudWatch Alarm Notifications'
+      TopicName: !Ref snsTopicName
+      Tags: 
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "env"
+          Value: !Ref env  
+Outputs: 
+  snsTopicARN:  
+    Description: SNS Topic ARN.
+    Value: !GetAtt snsTopic.TopicArn
+    Export:
+      Name: !Sub '${project}-${app}-${env}-snsTopicARN-${AWS::Region}'

@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "cfn for vpc security groups"
+Parameters:
+  project:
+    Type: String
+    Description: Name of the project
+  app:
+    Type: String
+    Description: Name of the application
+  awsEnv:
+    Type: String
+    AllowedValues: [dev, dev01, int, int01, uat, uat01, prd, prd01,stage,stag01,test,prod,dr]
+  vpcId:
+    Type: String
+    Description: VPC ID to launch the SGs in
+  vpcCidr:
+    Type: String
+    Description: VPC Cidr
+  ipCidrs:
+    Type: CommaDelimitedList
+    Description: allowed ip CIDRs
+
+Resources:
+
+ #SG ALB
+  sgAlb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${project}-${app}-${awsEnv}-sg-sgAlb-${AWS::Region}"
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${project}-${app}-${awsEnv}-sg-sgAlb-${AWS::Region}"  
+  sgAlbSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref sgAlb
+      Description: allow access to ALB from internet
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      CidrIp: 0.0.0.0/0
+ #SG Web App
+  sgWebApp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${project}-${app}-${awsEnv}-sg-WebApp-${AWS::Region}"
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${project}-${app}-${awsEnv}-sg-WebApp-${AWS::Region}"
+  WebappSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref sgWebApp
+      Description: allow access to Webapp from ALB
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+  WebappSecurityGroupIngressSSH:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref sgWebApp
+      Description: allow access from bastion host
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref sgBastionHost
+ #SG Bastion Host
+  sgBastionHost:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${project}-${app}-${awsEnv}-sg-sgBastionHost-${AWS::Region}"
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${project}-${app}-${awsEnv}-sg-sgBastionHost-${AWS::Region}"
+  sgSsh2202:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref sgBastionHost
+      Description: SSH access from Allowed CIDR
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: !Select [1, !Ref ipCidrs]
+  # SG RDS
+  sgRDS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${project}-${app}-${awsEnv}-rds-sg-${AWS::Region}"
+      VpcId: !Ref vpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${project}-${app}-${awsEnv}-rds-sg-${AWS::Region}"
+
+#Only allow traffic from bastion host's security group
+  sgRDSIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref sgRDS
+      Description: DB port access from from bastion host
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref sgBastionHost
+
+
+Outputs:
+  sgAlb:
+    Value: !Ref sgAlb
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-sg-sgAlb-${AWS::Region}"
+  sgWebApp:
+    Value: !Ref sgWebApp
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-sg-WebApp-${AWS::Region}"
+  sgBastionHost:
+    Value: !Ref sgBastionHost
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-sg-sgBastionHost-${AWS::Region}"
+  sgRDS:
+    Value: !Ref sgRDS
+    Export:
+      Name: !Sub "${project}-${app}-${awsEnv}-rds-sg-${AWS::Region}"
+  
+  
+  

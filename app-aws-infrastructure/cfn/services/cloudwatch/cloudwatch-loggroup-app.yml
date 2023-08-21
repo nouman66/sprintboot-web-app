@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "cfn cloud watch alarms"
+Parameters:
+  project:
+    Type: String
+    Description: Name of the project
+  app:
+    Type: String
+    Default: app
+    Description: Name of the app
+  env:
+    Type: String
+    Default: prod
+    AllowedValues: [poc, dev, qa, uat, uat-dr, prod, prod-dr,stag01,stag,test,stage,dr]
+  LogGroupName:
+    Type: String
+  RetentionInDays:
+    Type: String
+
+Resources:
+
+  ApplicationLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Ref LogGroupName
+      RetentionInDays: !Ref RetentionInDays
+
+ 
+Outputs:
+  ApplicationLogGroupName:      
+    Value: !Ref ApplicationLogGroup
+    Export: 
+      Name: !Sub "${project}-${env}-ApplicationLogGroupName"
+  

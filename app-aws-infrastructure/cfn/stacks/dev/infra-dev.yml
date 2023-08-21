@@ -1,0 +1,480 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Springboot App Dev Environment Infrastructure"
+Parameters:
+  project:
+    Type: String
+    Description: Name of the project
+  app:
+    Type: String
+    Default: app
+    Description: Name of the app
+  awsEnv:
+    Type: String
+    Default: dev
+    AllowedValues: [poc, dev, qa, uat, uat-dr, prod, prod-dr,test,stage]
+  rdsMasterUser:
+    Type: String
+    NoEcho: true
+    MinLength: '8'
+    MaxLength: '16'
+    Description: The database admin account username.
+    ConstraintDescription: Minimum Length is 8 and Maximum is 16.
+  rdsMasterUserPassword:
+    Type: String
+    NoEcho: true
+    MinLength: '8'
+    MaxLength: '41'
+    Description: Master RDS password. Minimum Length is 8.
+    ConstraintDescription: Minimum Length is 8 and Maximum is 41.
+  codeStarConnectionId:
+    Type: String
+    NoEcho: true
+    Description: "Code Star Connection Id"
+  s3ArtifactPath:
+    Type: String
+    Default: "https://s3.amazonaws.com/springboot-dev-artifacts-us-east-1-158730516261/cfn/services"
+    Description: "Enter the artifact bucket path"
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/vpc/vpc-app.yml"
+      Parameters:
+        project:  !Ref project
+        app: app
+        awsEnv: !Ref awsEnv
+        vpcCidr: "10.34.0.0/16"
+        # public subnets
+        subnetPublic1:  "10.34.1.0/24"
+        subnetPublic2:  "10.34.2.0/24"
+        # protect subnets
+        subnetProtect1: "10.34.11.0/24"
+        subnetProtect2: "10.34.12.0/24"
+        # shield subnets
+        subnetShield1: "10.34.21.0/24"
+        subnetShield2: "10.34.22.0/24"
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  vpcSg:
+    DependsOn: vpc
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/vpc/vpc-security-grp.yml"
+      Parameters:
+        project: !Ref project
+        app: app
+        awsEnv: !Ref awsEnv
+        vpcId: !GetAtt vpc.Outputs.vpc
+        vpcCidr: !GetAtt vpc.Outputs.vpcCidr
+        ipCidrs: "119.156.127.61/32"
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  s3BucketServerAccessLogs:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+     TemplateURL: !Sub '${s3ArtifactPath}/s3/s3-app.yml'
+     Parameters:
+      project: !Ref project
+      app: access-logs
+      env: !Ref awsEnv
+      s3BucketName: !Sub '${project}-${awsEnv}-access-logs-${AWS::Region}-${AWS::AccountId}'
+     Tags:
+      - Key: "project"
+        Value: !Ref project
+      - Key: "app"
+        Value: !Ref app
+      - Key: "env"
+        Value: !Ref awsEnv
+  s3BucketCodePipeline:
+    DependsOn: s3BucketServerAccessLogs
+    Type: AWS::CloudFormation::Stack
+    Properties:
+     TemplateURL: !Sub '${s3ArtifactPath}/s3/s3-app.yml'
+     Parameters:
+      project: !Ref project
+      app: cp-artifacts
+      env: !Ref awsEnv
+      s3BucketName: !Sub '${project}-${awsEnv}-codepipeline-artifacts-${AWS::Region}-${AWS::AccountId}'
+      accessLogsBucketName: !GetAtt s3BucketServerAccessLogs.Outputs.s3Bucket
+     Tags:
+      - Key: "project"
+        Value: !Ref project
+      - Key: "app"
+        Value: !Ref app
+      - Key: "env"
+        Value: !Ref awsEnv
+  iamRoles:
+    DependsOn: s3BucketCodePipeline
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/iam/iam-app.yml"
+      Parameters:
+        project:  !Ref project
+        app: !Ref app
+        awsEnv: !Ref awsEnv
+        codePipelineS3BucketArn: !GetAtt s3BucketCodePipeline.Outputs.s3BucketArn
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  applicationLogGroup:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-loggroup-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          LogGroupName: '/application/logs'
+          RetentionInDays: '14'
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv        
+  bastionHostLogGroup:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-loggroup-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          LogGroupName: '/bastion/logs'
+          RetentionInDays: '14'
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv 
+  ec2IntanceWebApp:
+    DependsOn: [ vpc, applicationLogGroup, bastionHostLogGroup ]
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/ec2/ec2-app.yml"
+      Parameters: 
+        awsEnv: !Ref awsEnv
+        project: !Ref project
+        app: app
+        instanceType: 't2.micro'
+        imageId: 'ami-08a52ddb321b32a8c' 
+        keyName: !Sub "KP-${project}-${awsEnv}-app-${AWS::Region}"
+        securityGroups: !GetAtt vpcSg.Outputs.sgWebApp
+        subnetId: !GetAtt vpc.Outputs.subnetShield01
+        ec2Name: !Sub "${project}-${app}-${awsEnv}-ec2IntanceWebApp-${AWS::Region}"
+        rootBlockDeviceSize: '100'
+        instanceInitiatedShutdownBehavior: 'stop'
+        logGroupName: '/application/logs'
+        EC2InstanceRole: iamRoles.Outputs.webAppRole
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  ec2IntanceWebApp2:
+    DependsOn: [ vpc, applicationLogGroup, bastionHostLogGroup ]
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/ec2/ec2-app.yml"
+      Parameters: 
+        awsEnv: !Ref awsEnv
+        project: !Ref project
+        app: app
+        instanceType: 't2.micro'
+        imageId: 'ami-08a52ddb321b32a8c' 
+        keyName: !Sub "KP-${project}-${awsEnv}-app-${AWS::Region}"
+        securityGroups: !GetAtt vpcSg.Outputs.sgWebApp
+        subnetId: !GetAtt vpc.Outputs.subnetShield02
+        ec2Name: !Sub "${project}-${app}-${awsEnv}-ec2IntanceWebApp2-${AWS::Region}"
+        rootBlockDeviceSize: '100'
+        instanceInitiatedShutdownBehavior: 'stop'
+        logGroupName: '/application/logs'
+        EC2InstanceRole: iamRoles.Outputs.webAppRole
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  codebuildSpringBootApp:
+      DependsOn: [iamRoles, s3BucketCodePipeline]
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/codeBuild/codebuild.yml'
+        Parameters:
+          project: !Ref project
+          app: app
+          env: !Ref awsEnv
+          codeBuildProjectName: !Sub '${project}-${app}-${awsEnv}-cb'
+          iamServiceRoleArn: !GetAtt iamRoles.Outputs.codebuildExecutionRoleArn
+          buildSpecFilePath: 'buildspec.yml'
+          codeBuildEnvType: "LINUX_CONTAINER"
+          codeBuildEnvComputeType: "BUILD_GENERAL1_SMALL"
+          codeBuildEnvImage: "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
+          codeBuildPrivilegedMode: true
+          codeBuildsourceType: "CODEPIPELINE"
+          envVar1Value: !Sub "${AWS::Region}"
+          envVar2Value: !GetAtt s3BucketCodePipeline.Outputs.s3Bucket
+          envVar3Value: 'src'
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  codeDeployAutoScalingLBSpringBootApp:
+      DependsOn: [iamRoles, s3BucketCodePipeline]
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/codeDeployAutoScalingLB/codedeployAutoScalingLB.yml'
+        Parameters:
+          project: !Ref project
+          app: app
+          env: !Ref awsEnv
+          codeDeployApplicationName: !Sub '${project}-${app}-${awsEnv}-codedeploy'
+          iamServiceRoleArn: !GetAtt iamRoles.Outputs.codeDeployRole
+          DeploymentConfigName: CodeDeployDefault.OneAtATime
+          AutoScalingGroupDesiredCapacity: 2
+          AutoScalingGroupMinSize: 2
+          AutoScalingGroupMaxSize: 2
+          ImageId: ami-08a52ddb321b32a8c
+          InstanceType: t2.micro
+          WebappSecurityGroup: !GetAtt vpcSg.Outputs.sgWebApp
+          subnet1Id: !GetAtt vpc.Outputs.subnetShield01
+          subnet2Id: !GetAtt vpc.Outputs.subnetShield01
+          VPC: !GetAtt vpc.Outputs.vpc
+          ALBSecurityGroup: !GetAtt vpcSg.Outputs.sgAlb
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  codepipelineSpringBootApp:
+      DependsOn: [iamRoles, codebuildSpringBootApp, s3BucketCodePipeline]
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub "${s3ArtifactPath}/codepipeline/codepipeline-app.yml"
+        Parameters:
+          project: !Ref project
+          app: app
+          awsEnv: !Ref awsEnv
+          codeStarConnectionId: !Ref codeStarConnectionId 
+          gitHubOwner: 'nouman66'                                     
+          githubRepositoryName: 'sprintboot-web-app'
+          githubBranch: main
+          iamServiceRole: !GetAtt iamRoles.Outputs.codePipelineRoleArn
+          codePipelineBucket: !GetAtt s3BucketCodePipeline.Outputs.s3Bucket 
+          cbProject: !GetAtt codebuildSpringBootApp.Outputs.codeBuildProject
+          applicationName: !GetAtt codeDeployAutoScalingLBSpringBootApp.Outputs.applicationName
+          deploymentGroupName: !GetAtt codeDeployAutoScalingLBSpringBootApp.Outputs.deploymentGroupName
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  bastionHost:
+    DependsOn: vpc
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/ec2/ec2-app.yml"
+      Parameters: 
+        awsEnv: !Ref awsEnv
+        project: !Ref project
+        app: app
+        instanceType: 't2.micro'
+        imageId: 'ami-064d05b4fe8515623' 
+        keyName: !Sub "KP-${project}-${awsEnv}-bastionhost-${AWS::Region}"
+        securityGroups: !GetAtt vpcSg.Outputs.sgBastionHost
+        subnetId: !GetAtt vpc.Outputs.subnetPublic01
+        ec2Name: !Sub "${project}-${app}-${awsEnv}-sgBastionHost-${AWS::Region}"
+        rootBlockDeviceSize: '100'
+        instanceInitiatedShutdownBehavior: 'stop'
+        logGroupName: '/bastion/logs'
+        EC2InstanceRole: iamRoles.Outputs.WebAppRole
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+  snsTopic:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/sns/sns-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          snsTopicName: !Sub '${project}-${app}-${awsEnv}-sns-topic'
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  webServerCpuUtilizationCWAlarm:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-alarm-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          AlarmName: 'EC2 CPU Utilization Alarm'
+          AlarmDescription: 'Alarm if EC2 CPU utilization exceeds 80 percent'
+          Namespace: 'AWS/EC2'
+          MetricName: 'CPUUtilization'
+          Statistic: 'Average'
+          Period: '300'
+          EvaluationPeriods: '1'
+          Threshold: '80'
+          ComparisonOperator: 'GreaterThanThreshold'
+          DimensionName: 'InstanceId'
+          DimensionValue: !GetAtt ec2IntanceWebApp.Outputs.ec2Instance
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  webServer2CpuUtilizationCWAlarm:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-alarm-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          AlarmName: 'EC2 CPU Utilization Alarm'
+          AlarmDescription: 'Alarm if EC2 CPU utilization exceeds 80 percent'
+          Namespace: 'AWS/EC2'
+          MetricName: 'CPUUtilization'
+          Statistic: 'Average'
+          Period: '300'
+          EvaluationPeriods: '1'
+          Threshold: '80'
+          ComparisonOperator: 'GreaterThanThreshold'
+          DimensionName: 'InstanceId'
+          DimensionValue: !GetAtt ec2IntanceWebApp2.Outputs.ec2Instance
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  bastionHostCpuUtilizationCWAlarm:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+        TemplateURL: !Sub '${s3ArtifactPath}/cloudwatch/cloudwatch-alarm-app.yml'
+        Parameters:
+          project: !Ref project
+          app: !Ref app
+          env: !Ref awsEnv
+          AlarmName: 'ALB CPU Utilization Alarm'
+          AlarmDescription: 'Alarm if ALB CPU utilization exceeds 80 percent'
+          Namespace: 'AWS/ApplicationELB'
+          MetricName: 'TargetResponseTime'
+          Statistic: 'Average'
+          Period: '300'
+          EvaluationPeriods: '1'
+          Threshold: '80'
+          ComparisonOperator: 'GreaterThanThreshold'
+          DimensionName: 'LoadBalancer'
+          DimensionValue: !GetAtt codeDeployAutoScalingLBSpringBootApp.Outputs.LoadBalancerName
+        Tags:
+          - Key: "project"
+            Value: !Ref project
+          - Key: "app"
+            Value: !Ref app
+          - Key: "awsEnv"
+            Value: !Ref awsEnv
+  rdsApp:
+    DependsOn: [vpcSg,iamRoles]
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${s3ArtifactPath}/rds/rds-app.yml"
+      Parameters:
+        project: !Ref project
+        app: app
+        awsEnv: !Ref awsEnv
+        dbInstanceIdentifier: !Sub '${project}-${awsEnv}-rdsDB-${AWS::Region}'
+        rdsDBSubnetGroupName: !Sub '${project}-${awsEnv}-subnetgrp-${AWS::Region}'
+        rdsSubnets: !Join
+          - ','
+          - - !GetAtt vpc.Outputs.subnetShield01
+            - !GetAtt vpc.Outputs.subnetShield02
+        rdsDBName: 'devDB'
+        rdsEngine: 'mysql'
+        rdsEngineVersion: '8.0'
+        rdsMultiAZ: false   
+        rdsReadReplica: false 
+        rdsVPCSecurityGroup: !GetAtt vpcSg.Outputs.sgRDS
+        rdsMasterUserPassword: !Ref rdsMasterUserPassword
+        rdsMasterUser: !Ref rdsMasterUser
+        rdsKmsKeyArn: !Sub  'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/a8d9abd7-b2c5-40a5-a50f-f6b19384263f'
+        rdsDBInstanceClass: 'db.t2.micro'
+        rdsAllocatedStorage: 100
+        rdsBackupRetentionPeriod: 7
+        rdsMaxAllocatedStorage: 150
+        rdsDeletionProtection: true
+        rdsEnablePerformanceInsights: true
+        rdsMonitoringInterval: 60
+        rdsMonitoringRoleArn: !GetAtt iamRoles.Outputs.iamRoleRDSEnhancedMonitoring
+      Tags:
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "awsEnv"
+          Value: !Ref awsEnv
+
+Outputs:
+ vpc:
+  Value: !Ref vpc
+  Export: 
+    Name: !Sub "${project}-${app}-${awsEnv}-VPC-${AWS::Region}"
+ vpcSg:
+  Value: !Ref vpcSg
+  Export: 
+    Name: !Sub "${project}-${app}-${awsEnv}-vpc-Sg-${AWS::Region}"
+ rdsApp:
+  Value: !Ref rdsApp
+  Export:
+    Name: !Sub "${project}-${app}-${awsEnv}-rdsApp-${AWS::Region}"
+ iamRoles:
+    Value: !Ref iamRoles
+    Export: 
+      Name: !Sub "${project}-${app}-${awsEnv}-iamRoles-${AWS::Region}"
+ bastionHost:
+    Value: !Ref bastionHost
+    Export: 
+      Name: !Sub "${project}-${app}-${awsEnv}-bastionHost-${AWS::Region}"

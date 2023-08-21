@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "cfn for S3 bucket with encryption"
+Parameters:
+  project:
+    Type: String
+    MinLength: '3'
+    MaxLength: '10'
+    Description: Enter the Project name.
+  app:
+    Type: String
+    MinLength: '3'
+    MaxLength: '15'
+    Description: Enter the Application name.
+  env:
+    Type: String
+    AllowedValues: [dev, dev01, int, int01, uat, uat01, prd, prd01,stage,qa,poc,prod,dr,billing]
+    Description: Enter the Environment.
+  s3BucketName:
+    Type: String
+    Description: Enter valid Bucket name.
+  publicAccessBlockAcls:
+    Type: String
+    Default: True
+    AllowedValues: [True, False]
+    Description: Block public access control lists (ACLs) for this bucket and objects in this bucket.
+  publicAccessBlockPolicy:
+    Type: String
+    Default: True
+    AllowedValues: [True, False]
+    Description: Block public bucket policies for this bucket.
+  publicAccessBlockIgnoreAcls:
+    Type: String
+    Default: True
+    AllowedValues: [True, False]
+    Description: Ignore all public ACLs on this bucket and objects in this bucket.
+  publicAccessBlockRestrictBuckets:
+    Type: String
+    Default: True
+    AllowedValues: [True, False]
+    Description: Restrict public bucket policies for this bucket.
+  versioningConfigStatus:
+    Type: String
+    Default: Enabled
+    Description: Enables multiple versions of all objects in this bucket.
+  accessControl:
+    Type: String
+    Default: Private
+    Description: Access control list (ACL) that grants predefined permissions to the bucket.
+  errorDocument:
+    Type: String
+    Default: 'error.html'
+    Description: Name of the error document for the website.
+  indexDocument:
+    Type: String
+    Default: 'index.html'
+    Description: Name of the index document for the website.
+  websiteConfigEnabled:
+    Type: String
+    Default: false
+    AllowedValues: [true, false]
+    Description: Configure the bucket as a static website.
+  accessLogsBucketName:
+    Type: String
+    Description: Enter valid Bucket name.
+    Default: ''
+Conditions:
+   isWebsiteConfigEnabled: !Equals [ !Ref websiteConfigEnabled, true]
+   isProd: !Equals [ !Ref env, prod]
+   isAccessLogsBucket: !And
+     - !Equals [ !Ref env, prod]
+     - !Equals [ !Ref app, access-logs]
+Resources:
+  s3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref s3BucketName
+      WebsiteConfiguration:
+       !If 
+        - isWebsiteConfigEnabled
+        - ErrorDocument: !Ref errorDocument 
+          IndexDocument: !Ref indexDocument
+        - !Ref 'AWS::NoValue'
+      LoggingConfiguration:
+       !If 
+        - isAccessLogsBucket
+        - !Ref 'AWS::NoValue'
+        - DestinationBucketName: !If [isProd, !Ref accessLogsBucketName , !Ref 'AWS::NoValue']
+          LogFilePrefix: !If [isProd, !Ref app , !Ref 'AWS::NoValue']
+      AccessControl: !Ref accessControl
+      VersioningConfiguration:
+        Status: !Ref versioningConfigStatus
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: !Ref publicAccessBlockAcls
+        BlockPublicPolicy: !Ref publicAccessBlockPolicy
+        IgnorePublicAcls: !Ref publicAccessBlockIgnoreAcls
+        RestrictPublicBuckets: !Ref publicAccessBlockRestrictBuckets    
+      Tags: 
+        - Key: "project"
+          Value: !Ref project
+        - Key: "app"
+          Value: !Ref app
+        - Key: "env"
+          Value: !Ref env
+
+  bucketPolicy:
+    Condition: isAccessLogsBucket
+    Type: AWS::S3::BucketPolicy   
+    Properties:
+      Bucket: !Ref s3Bucket
+      PolicyDocument:
+        Version: '2008-10-17'
+        Id: PolicyForAccessLogs
+        Statement:
+          - Sid: AllowAccessLogsPermission
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub 'arn:aws:s3:::${s3Bucket}/*'
+
+Outputs:  
+  s3Bucket:
+    Description: Bucket Name
+    Value: !Ref s3Bucket
+    Export:
+      Name: !Sub '${project}-${app}-${env}-artifacts-${AWS::Region}'
+  s3BucketArn:
+    Description: ARN of S3 Bucket
+    Value: !GetAtt s3Bucket.Arn
+    Export:
+      Name: !Sub '${project}-${app}-${env}-artifactsBucketArn-${AWS::Region}'
+  s3RegionalDomainName:
+    Description: S3 Bucket Regional DomainName
+    Value: !GetAtt s3Bucket.RegionalDomainName
+    Export:
+      Name: !Sub '${project}-${app}-${env}-s3RegionalDomainName-${AWS::Region}'
+  

@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "cfn for CodeBuild project to perform builds"
+
+Parameters:
+  project:
+    Type: String
+    MinLength: '3'
+    MaxLength: '10'
+    Description: Enter the Project Name.
+  app:
+    Type: String
+    MinLength: '3'
+    MaxLength: '15'
+    Description: Enter the Application.
+  env:
+    Type: String
+    AllowedValues: [dev, dev01, int, int01, uat, uat01, prd, prd01,stage,prod,dr]
+    Description: Enter the Environment.
+  codeBuildProjectName:
+    Type: String
+    Description: Enter the CodeBuild Project Name.
+  iamServiceRoleArn:
+    Type: String
+    Description: codebuild role ARN.
+  codeBuildEnvType:
+    Type: String
+    Description: Enter the codeBuild Environment Type.
+  codeBuildEnvComputeType:
+    Type: String
+    Description: Enter the codeBuild Environment Compute Type.
+  codeBuildEnvImage:
+    Type: String
+    Description: Enter the codeBuild Environment Image.
+  codeBuildsourceType:
+    Type: String
+    Description: Enter the codeBuild source type.
+  buildSpecFilePath:
+    Type: String
+    Description: Enter the Build Spec file path
+  codeBuildPrivilegedMode:
+    Type: String
+    Default: 'false'
+    Description: Enables running the Docker daemon inside a Docker container. Set to true only if the build project is used to build Docker images.
+  envVar1Value:
+    Type: String
+  envVar2Value:
+    Type: String
+  envVar3Value:
+    Type: String
+Resources: 
+  codeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref codeBuildProjectName
+      ServiceRole: !Ref iamServiceRoleArn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: !Ref codeBuildEnvType
+        ComputeType: !Ref codeBuildEnvComputeType
+        Image: !Ref codeBuildEnvImage
+        PrivilegedMode: !Ref codeBuildPrivilegedMode
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Type: PLAINTEXT
+            Value: !Ref envVar1Value
+          - Name: S3BUCKET
+            Type: PLAINTEXT
+            Value: !Ref envVar2Value
+          - Name: APP_FOLDER
+            Type: PLAINTEXT
+            Value: !Ref envVar3Value
+      Source:
+        Type: !Ref codeBuildsourceType
+        BuildSpec: !Ref buildSpecFilePath
+Outputs: 
+  codeBuildProject:  
+    Description: Build Project Name.
+    Value: !Ref codeBuildProject
+    Export:
+      Name: !Sub '${project}-${app}-${env}-codeBuildProject-${AWS::Region}'
+  codeBuildProjectArn:  
+    Description: Build Project Arn.
+    Value: !GetAtt codeBuildProject.Arn
+    Export:
+      Name: !Sub '${project}-${app}-${env}-codeBuildProjectArn-${AWS::Region}'
