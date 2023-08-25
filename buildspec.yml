@@ -9,6 +9,7 @@ phases:
       - cd $APP_FOLDER
       - mvn clean install
       - mvn clean package
+      - ls
 
   post_build:
     commands:
