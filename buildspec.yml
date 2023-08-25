@@ -6,6 +6,7 @@ phases:
       java: corretto17
   build:
     commands:
+      - cd $APP_FOLDER
       - mvn -Dmaven.test.skip=true clean install 
       # - cd $APP_FOLDER
       # - mvn clean install
