@@ -10,6 +10,8 @@ phases:
       - mvn clean install
       - mvn clean package
       - ls
+      - cd target
+      - ls
 
   post_build:
     commands:
