@@ -19,7 +19,6 @@ phases:
       - echo Build completed
 artifacts:
   files:
-    - *.war
     - aws/scripts/*.sh
     - appspec.yml
   discard-paths: yes
