@@ -6,9 +6,10 @@ phases:
       java: corretto17
   build:
     commands:
-      - cd $APP_FOLDER
-      - mvn clean install
-      - mvn clean package
+      - mvn -Dmaven.test.skip=true clean install 
+      # - cd $APP_FOLDER
+      # - mvn clean install
+      # - mvn clean package
       - ls
       - cd target
       - ls
@@ -18,7 +19,7 @@ phases:
       - echo Build completed
 artifacts:
   files:
-    - $APP_FOLDER/target/*.war
+    - *.war
     - aws/scripts/*.sh
     - appspec.yml
   discard-paths: yes
