@@ -7,8 +7,6 @@ phases:
       - ls
       - cd spring-boot-hello-world-example
       - mvn -Dmaven.test.skip=true clean install
-      # - mvn clean install
-      # - mvn clean package
       - ls
       - cd target
       - ls
