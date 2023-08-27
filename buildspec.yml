@@ -4,12 +4,8 @@ phases:
 
   build:
     commands:
-      - ls
       - cd spring-boot-hello-world-example
       - mvn -Dmaven.test.skip=true clean install
-      - ls
-      - cd target
-      - ls
 
   post_build:
     commands:
