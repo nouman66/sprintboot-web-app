@@ -1,0 +1,4 @@
+aws s3 sync . s3://springboot-dev-artifacts-us-east-1-963983353816 --include "*.yml" --exclude "*.py" --exclude "*.txt" \
+--exclude "*.yaml" --exclude "*.json" --exclude "*.DS_Store" --exclude "*.gitignore" --exclude ".git/*"
+
+aws cloudformation deploy --template-file infra-dev.yml --stack-name webapp-dev --parameter-overrides project=webapp app=app awsEnv=dev codeStarConnectionId= --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND --tags project=webapp app=app awsEnv=dev

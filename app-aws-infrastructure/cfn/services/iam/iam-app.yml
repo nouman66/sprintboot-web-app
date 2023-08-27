@@ -70,13 +70,7 @@ Resources:
                 - codebuild:UpdateReport
                 - codebuild:BatchPutTestCases
                 - codebuild:BatchPutCodeCoverages
-              Resource: '*' 
-            -  # Allow codebuild to access Secrets.
-              Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource:
-                - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:your-secret-name
+              Resource: '*'
       RoleName: !Sub '${project}-${app}-${awsEnv}-codeBuildRole'
   codeDeployRole:
     Type: AWS::IAM::Role
@@ -106,11 +100,13 @@ Resources:
                   - ec2:RunInstances
                   - ec2:CreateTags
                   - iam:PassRole
+                  - s3:*
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:codedeploy:*:${AWS::AccountId}:*'
   bastionHostRole:
     Type: 'AWS::IAM::Role'
     Properties:
+      RoleName: !Sub "${project}-${app}-${awsEnv}-bastionhost-${AWS::Region}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -171,14 +167,21 @@ Resources:
                 - codebuild:DescribeTestCases
                 - codebuild:DescribeCodeCoverages
                 - codebuild:List*
-              Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${project}-app-${awsEnv}-cb-*'
+              Resource: !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/webapp-app-dev-cb'
             -  # Allow codepipeline to use codestar connection
               Sid: codeStarPolicy
               Effect: Allow
               Action:
                 - codestar-connections:UseConnection
               Resource:
-                - arn:aws:codestar-connections:us-east-1:158730516251:connection/d0482a99-f20e-4278-9a63-22f52aa549b8
+                - arn:aws:codestar-connections:us-east-1:963983353816:connection/4c155abf-3afc-4dd8-bb19-32ed4a9e1a07
+            -  # Allow codepipeline to deploy
+              Sid: codeDeployPolicy
+              Effect: Allow
+              Action:
+                - codedeploy:*
+              Resource:
+                - !Sub 'arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:*'
       RoleName: !Sub "${project}-${app}-${awsEnv}-codePipelineServiceRole-${AWS::Region}"
       Tags:
         - Key: "project"
@@ -211,7 +214,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: ec2.amazonaws.com
+              Service:
+                - "ec2.amazonaws.com"
+                - "codedeploy.amazonaws.com"
             Action:
               - sts:AssumeRole
       Policies:
@@ -225,6 +230,16 @@ Resources:
                   - ec2:Describe*
                   - ec2:StartInstances
                   - ec2:StopInstances
+                Resource: '*'
+              -  # Allow codebuild to get objects from codepipeline service buckets
+                Sid: S3ObjectPolicy
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: 
+                  - !Sub '${codePipelineS3BucketArn}/*'
                 Resource: '*'
               # Permissions related to CodePipeline, CodeBuild, and CodeDeploy
               - Effect: Allow
@@ -261,36 +276,17 @@ Resources:
                 Action:
                   - rds:Describe*
                 Resource: '*'
-
-   # RDS Enhanced Monitoring Role
-  iamRoleRDSEnhancedMonitoring:
-    Type: AWS::IAM::Role
-    Properties: 
-      Description: !Sub "${project} ${awsEnv} env RDS Enhanced Monitoring Role"
-      RoleName: !Sub "${project}-${app}-${awsEnv}-role-rdsEnhancedMonitoring-${AWS::Region}"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - monitoring.rds.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
-      Tags: 
-        - Key: Name
-          Value: !Sub "${project}-${app}-${awsEnv}-rdsEnhancedMonitoring-${AWS::Region}"
-        - Key: project
-          Value: !Ref project
-        - Key: awsEnv
-          Value: !Ref awsEnv
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
   
 Outputs:
   codeDeployRole:
-    Description: codeDeploy role name.
-    Value: !Ref codeDeployRole
+    Description: codeDeploy role arn.
+    Value: !GetAtt codeDeployRole.Arn
     Export:
       Name: !Sub '${project}-${app}-${awsEnv}-codeDeployRole-${AWS::Region}'
   codebuildExecutionRole:
@@ -313,21 +309,12 @@ Outputs:
     Value: !GetAtt codePipelineRole.Arn
     Export:
       Name: !Sub '${project}-${app}-${awsEnv}-codePipelineRoleArn-${AWS::Region}'
-  chatbotRoleArn:
-    Description: Chatbot channel role arn.
-    Value: !GetAtt chatbotRole.Arn
-    Export:
-      Name: !Sub '${project}-${app}-${awsEnv}-chatbotChannelRoleArn-${AWS::Region}'
-  iamRoleRDSEnhancedMonitoring:
-    Value: !GetAtt iamRoleRDSEnhancedMonitoring.Arn
-    Export:
-      Name: !Sub "${project}-${app}-${awsEnv}-rdsEnhancedMonitoringARN-${AWS::Region}"
   webAppRole:
-    Value: !GetAtt webAppRole.Arn
+    Value: !Ref webAppRole
     Export:
       Name: !Sub "${project}-${app}-${awsEnv}-WebAppRole-${AWS::Region}"
   bastionHostRole:
-    Value: !GetAtt bastionHostRole.Arn
+    Value: !Ref bastionHostRole
     Export:
       Name: !Sub "${project}-${app}-${awsEnv}-bastionHostRole-${AWS::Region}"
 

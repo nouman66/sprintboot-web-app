@@ -25,10 +25,6 @@ Parameters:
     Type: String
     Default: ''
     Description: Arn
-  instanceInitiatedShutdownBehavior:
-    Type: String
-    AllowedValues: [stop,terminate]
-    Description: initiated shutdown behaviour
   keyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: key pair 
@@ -76,12 +72,17 @@ Parameters:
   EC2InstanceRole:
     Type: String
 
-Conditions:
-  addBlockDrive1: !Not [!Equals [!Ref blockDevice1Size, '']]
-  addBlockDrive2: !Not [!Equals [!Ref blockDevice2Size, '']]
-
 Resources:
+
+
+  EC2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: EC2InstanceRole
+
   ec2Instance:
+    DependsOn: EC2InstanceProfile
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref instanceType
@@ -89,55 +90,32 @@ Resources:
       SubnetId: !Ref subnetId
       SecurityGroupIds: !Ref securityGroups
       UserData:
-          - Fn::Base64: 
-              !Sub |
-                #!/bin/bash -xe
-                yum install -y amazon-cloudwatch-agent
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            yum install -y amazon-cloudwatch-agent
 
-                cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<EOL
-                {
-                  "logs": {
-                    "logs_collected": {
-                      "files": {
-                        "collect_list": [
-                          {
-                            "file_path": "/var/log/messages",
-                            "log_group_name": "${logGroupName}",
-                            "log_stream_name": "{instance_id}",
-                            "timezone": "Local"
-                          }
-                        ]
+            cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<EOL
+            {
+              "logs": {
+                "logs_collected": {
+                  "files": {
+                    "collect_list": [
+                      {
+                        "file_path": "/var/log/messages",
+                        "log_group_name": "${logGroupName}",
+                        "log_stream_name": "{instance_id}",
+                        "timezone": "Local"
                       }
-                    }
+                    ]
                   }
                 }
-                EOL
+              }
+            }
+            EOL
 
-                # Start the CloudWatch agent using the configuration
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
-
-                # Ensure the agent starts on reboot
-                systemctl enable amazon-cloudwatch-agent
-      BlockDeviceMappings:
-          - DeviceName: !Ref rootBlockDeviceName
-            Ebs:
-              VolumeSize: !Ref rootBlockDeviceSize
-              Encrypted: true
-      - !If
-          - addBlockDrive1
-          - DeviceName: !Ref blockDevice1Name
-            Ebs:
-              VolumeSize: !Ref blockDevice1Size
-              Encrypted: true
-          - !Ref AWS::NoValue
-      - !If
-          - addBlockDrive2
-          - DeviceName: !Ref blockDevice2Name
-            Ebs:
-              VolumeSize: !Ref blockDevice2Size
-              Encrypted: true
-          - !Ref AWS::NoValue
-      InstanceInitiatedShutdownBehavior: !Ref instanceInitiatedShutdownBehavior
+            /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+            systemctl enable amazon-cloudwatch-agent
       KeyName: !Ref keyName
       Tags:
         - Key: Project
@@ -146,23 +124,13 @@ Resources:
           Value: !Sub "${awsEnv}"
         - Key: Name
           Value: !Ref ec2Name
-
-  elasticIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      InstanceId: !Ref ec2Instance
-
-  EC2InstanceProfile:
-    Type: 'AWS::IAM::InstanceProfile'
-    Properties:
-      Roles:
-        - Ref: EC2InstanceRole
+      IamInstanceProfile: !Ref EC2InstanceProfile
 
 Outputs:
-  ec2:
+  ec2Instance:
     Value: !Ref ec2Instance
     Export:
       Name: !Sub 'ec2-Instance-${project}-${awsEnv}-${app}-${AWS::Region}'
+
     
     

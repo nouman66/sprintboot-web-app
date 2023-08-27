@@ -25,10 +25,5 @@ Resources:
       LogGroupName: !Ref LogGroupName
       RetentionInDays: !Ref RetentionInDays
 
- 
-Outputs:
-  ApplicationLogGroupName:      
-    Value: !Ref ApplicationLogGroup
-    Export: 
-      Name: !Sub "${project}-${env}-ApplicationLogGroupName"
+
   

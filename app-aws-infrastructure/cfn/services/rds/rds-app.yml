@@ -98,7 +98,7 @@ Parameters:
     Description: Specifies the storage type to be associated with the DB instance.
   rdsStorageEncrypted:
     Type: String
-    Default: true
+    Default: false
     AllowedValues: [true, false]
     Description: Specifies the storage type to be associated with the DB instance.
   rdsPubliclyAccessible:
@@ -144,9 +144,6 @@ Parameters:
     Default: false
     AllowedValues: [true, false]
     Description: Create ReadReplica. This should be false for sql server.
-  rdsParameterGroup:
-    Type: String
-    Description: RDS Parameter Group.
   rdsMaxAllocatedStorage:
     Type: String
     Default: ''
@@ -183,8 +180,26 @@ Resources:
           Value: !Sub '${project}-${app}-${awsEnv}-rds-subnetGroup-${AWS::Region}'
         - Key: project
           Value: !Ref project
+  RDSInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: This is rds instance secret
+      Name: RDSSecretsDemo
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+        ExcludeCharacters: "\"@/\\"
+      Tags: 
+          - Key: awsEnv
+            Value: !Ref awsEnv
+          - Key: Name
+            Value: !Sub '${project}-${app}-${awsEnv}-rds-secret-${AWS::Region}'
+          - Key: project
+            Value: !Ref project
   rdsDB:
     Type: "AWS::RDS::DBInstance"
+    DependsOn: [RDSInstanceSecret]
     DeletionPolicy: Snapshot
     Properties: 
       AllocatedStorage: !Ref rdsAllocatedStorage
@@ -194,8 +209,7 @@ Resources:
       CopyTagsToSnapshot: !Ref rdsCopyTagsToSnapshot
       DBInstanceIdentifier: !Ref dbInstanceIdentifier 
       DBInstanceClass: !Ref rdsDBInstanceClass
-      DBName: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsDBName] 
-      DBParameterGroupName: !Ref rdsParameterGroup
+      DBName: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsDBName]
       DBSubnetGroupName: !Ref rdsSubnetGroupName
       DeleteAutomatedBackups: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsDeleteAutomatedBackups]  
       DeletionProtection: !Ref rdsDeletionProtection
@@ -203,12 +217,12 @@ Resources:
       EnablePerformanceInsights: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsEnablePerformanceInsights] 
       Engine: !Ref rdsEngine
       EngineVersion: !Ref rdsEngineVersion
-      KmsKeyId: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsKmsKeyArn]
+      KmsKeyId: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref 'AWS::NoValue']
       MonitoringInterval: !If [isEnabledEnhancedMonitoring,!Ref rdsMonitoringInterval, !Ref 'AWS::NoValue' ]
       MonitoringRoleArn: !If [isEnabledEnhancedMonitoring,!Ref rdsMonitoringRoleArn, !Ref 'AWS::NoValue' ]
       MaxAllocatedStorage: !If [hasDBMaxAllocatedStorage, !Ref rdsMaxAllocatedStorage, !Ref 'AWS::NoValue']
-      MasterUserPassword: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsMasterUserPassword]
-      MasterUsername: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Ref rdsMasterUser]
+      MasterUserPassword: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::password}}"]
+      MasterUsername: !If [hasDBSnapshotIdentifier, !Ref 'AWS::NoValue', !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::username}}"]
       DBSnapshotIdentifier: !If [hasDBSnapshotIdentifier, !Ref rdsDBSnapshotIdentifier, !Ref 'AWS::NoValue']
       MultiAZ: !Ref rdsMultiAZ
       Port: !Ref rdsPort
@@ -241,6 +255,14 @@ Resources:
           Value: !Sub '${project}-${app}-${awsEnv}-rdsReadReplica-${AWS::Region}'
         - Key: app
           Value: !Ref app
+  SecretRDSInstanceAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId:
+        Ref: RDSInstanceSecret
+      TargetId:
+        Ref: rdsDB
+      TargetType: AWS::RDS::DBInstance
 Outputs:
   rdsDBInstance:
     Description: RDS DB instance name

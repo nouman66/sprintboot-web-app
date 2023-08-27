@@ -37,14 +37,24 @@ Parameters:
     Type: String
   WebappSecurityGroup:
     Type: String
-  subnet1Id:
+  publicSubnet1:
     Type: String
-  subnet2Id:
+  publicSubnet2:
+    Type: String
+  privateSubnet1:
+    Type: String
+  privateSubnet2:
     Type: String
   VPC:
     Type: String
   ALBSecurityGroup:
     Type: String
+  webappRole:
+    Type: String
+  logGroupName:
+    Description: Name of the CloudWatch Log Group
+    Type: String
+
 Resources: 
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -60,12 +70,11 @@ Resources:
       Protocol: HTTP
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    DependsOn: InternetGateway
     Properties:
       Scheme: internet-facing
       Subnets:
-        - Ref: subnet1Id 
-        - Ref: subnet2Id 
+        - Ref: publicSubnet1 
+        - Ref: publicSubnet2 
       SecurityGroups:
         - Ref: ALBSecurityGroup
   ALBTargetGroup:
@@ -88,6 +97,11 @@ Resources:
       Port: 8080
       Protocol: HTTP
       VpcId: !Ref VPC
+  WebappInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: webappRole
   WebappLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
@@ -98,6 +112,8 @@ Resources:
         Ref: InstanceType
       SecurityGroups:
         - Ref: WebappSecurityGroup
+      IamInstanceProfile:
+        Ref: WebappInstanceProfile
       UserData:
         "Fn::Base64":
           !Sub |
@@ -163,6 +179,36 @@ Resources:
               yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
               systemctl enable amazon-ssm-agent
               systemctl start amazon-ssm-agent
+              yum install -y amazon-cloudwatch-agent
+              cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<EOL
+              {
+                "logs": {
+                  "logs_collected": {
+                    "files": {
+                      "collect_list": [
+                        {
+                          "file_path": "/var/log/messages",
+                          "log_group_name": "${logGroupName}",
+                          "log_stream_name": "{instance_id}",
+                          "timezone": "Local"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+              EOL
+              /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+              systemctl enable amazon-cloudwatch-agent
+
+              apt update -y
+              apt install nginx -y
+              echo "server {
+                location / {
+                  proxy_pass http://${ApplicationLoadBalancer.DNSName};
+                }
+              }" > /etc/nginx/sites-available/default
+              systemctl restart nginx
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -174,8 +220,8 @@ Resources:
       LaunchConfigurationName:
         Ref: WebappLaunchConfig
       VPCZoneIdentifier:
-        - Ref: subnet1Id 
-        - Ref: subnet2Id 
+        - Ref: privateSubnet1 
+        - Ref: privateSubnet2 
       TargetGroupARNs:
         - Ref: ALBTargetGroup
       Tags:
@@ -218,11 +264,16 @@ Outputs:
       Name: !Sub '${project}-${app}-${env}-codeDeployApplication-${AWS::Region}'
   deploymentGroupName:  
     Description: deployment Group Name.
-    Value: !Ref deploymentGroupName
+    Value: !Ref codeDeploypDeploymentGroup
     Export:
       Name: !Sub '${project}-${app}-${env}-deploymentGroupName-${AWS::Region}'
   LoadBalancerName:  
     Description: deployment Group Name.
-    Value: !Ref !GetAtt ApplicationLoadBalancer.LoadBalancerName
+    Value: !GetAtt ApplicationLoadBalancer.LoadBalancerName
     Export:
-      Name: !Sub '${project}-${app}-${env}-deploymentGroupName-${AWS::Region}'
+      Name: !Sub '${project}-${app}-${env}-LoadBalancerName-${AWS::Region}'
+  AutoScalingGroupName:  
+    Description: AutoScaling Group Name.
+    Value: !Ref AutoScalingGroup
+    Export:
+      Name: !Sub '${project}-${app}-${env}-AutoScalingGroupName-${AWS::Region}'

@@ -52,7 +52,6 @@ Conditions:
   isPublicIP: !Equals [!Ref isPublicIPActive, true]
   isAZ1: !Not [!Equals [!Ref subnetPublic1, "" ]]
   isAZ2: !Not [!Equals [!Ref subnetPublic2, "" ]]
-  isDR: !Equals [ !Ref awsEnv, dr]
 Resources:
   vpc:
     Type: AWS::EC2::VPC
@@ -96,110 +95,50 @@ Resources:
     Condition: isAZ1
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [0, !GetAZs ''], !Select [2, !GetAZs '']]
+      AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Ref subnetPublic1
       MapPublicIpOnLaunch: !Ref isPublicIPActive
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value: 
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-public-${az}-${subnetPublic1}
-            - az: !Select [0, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-public-${az}-${subnetPublic1}
-            - az: !Select [2, !GetAZs '']
+
   subnetPublic02: 
     Condition: isAZ2
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [1, !GetAZs ''], !Select [3, !GetAZs '']]
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref subnetPublic2
       MapPublicIpOnLaunch: !Ref isPublicIPActive
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value:
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-public-${az}-${subnetPublic2}
-            - az: !Select [1, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-public-${az}-${subnetPublic2}
-            - az: !Select [3, !GetAZs '']
+
   # protect subnets 
   subnetProtect01:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [0, !GetAZs ''], !Select [2, !GetAZs '']]
+      AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Ref subnetProtect1
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value:
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-protect-${az}-${subnetProtect1}
-            - az: !Select [0, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-protect-${az}-${subnetProtect1}
-            - az: !Select [2, !GetAZs '']
+
   subnetProtect02:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [1, !GetAZs ''], !Select [3, !GetAZs '']]
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref subnetProtect2
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value: 
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-protect-${az}-${subnetProtect2}
-            - az: !Select [1, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-protect-${az}-${subnetProtect2}
-            - az: !Select [3, !GetAZs '']
+
   # Shield subnets 
   subnetShield01:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [0, !GetAZs ''], !Select [2, !GetAZs '']]
+      AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Ref subnetShield1
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value: 
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-shield-${az}-${subnetShield1}
-            - az: !Select [0, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-shield-${az}-${subnetShield1}
-            - az: !Select [2, !GetAZs '']
+
   subnetShield02:
     Type: AWS::EC2::Subnet
     Properties:
-      AvailabilityZone: !If [isDR, !Select [1, !GetAZs ''], !Select [3, !GetAZs '']]
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref subnetShield2
       VpcId: !Ref vpc
-      Tags:
-      - Key: Name
-        Value: 
-         !If 
-          - isDR
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-shield-${az}-${subnetShield2}
-            - az: !Select [1, !GetAZs '']
-          - !Sub
-            - ${project}-${awsEnv}-${app}-sub-shield-${az}-${subnetShield2}
-            - az: !Select [3, !GetAZs '']
+
  
 # eips for nats
   eip01:

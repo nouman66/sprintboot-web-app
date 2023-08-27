@@ -57,11 +57,4 @@ Resources:
           Value: !Ref DimensionValue
       AlarmActions:
         - Ref: AlarmSNSTopic
-
- 
-Outputs:
-  Alarm:      
-    Value: !Ref Alarm
-    Export: 
-      Name: !Sub "${project}-${env}-${AlarmName}"
   
